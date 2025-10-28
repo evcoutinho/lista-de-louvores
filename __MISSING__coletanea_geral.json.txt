@@ -1,0 +1,1 @@
+Arquivo coletanea_geral.json não encontrado no diretório /mnt/data e não foi incluído.
