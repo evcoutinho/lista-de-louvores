@@ -29,7 +29,7 @@ header {
   margin-bottom: 20px;
 }
 header img {
-  height: 80px;
+  height: 90px;
   margin-right: 20px;
 }
 header h1 {
@@ -126,5 +126,161 @@ a.pdf-link:hover { text-decoration: underline; }
 
   <table id="tabelaLouvores">
     <thead>
-      <tr><th>Nº</th><th>Louvor</th><th>Tom atual</th><th>Tom original</th><th
+      <tr><th>Nº</th><th>Louvor</th><th>Tom atual</th><th>Tom original</th><th>Coletânea</th><th>Ações</th></tr>
+    </thead>
+    <tbody id="corpoTabela"></tbody>
+  </table>
+
+  <div style="margin-top:10px">
+    <button class="green" onclick="compartilharWhatsApp()">📱 Compartilhar via WhatsApp</button>
+    <button class="blue" onclick="gerarImagem()">🖼️ Gerar imagem da lista</button>
+  </div>
+
+  <footer>
+    <div class="verse">Salmo 150:6 — “Tudo quanto tem fôlego louve ao Senhor. Louvai ao Senhor!”</div>
+  </footer>
+</div>
+
+<script>
+const corpoTabela = document.getElementById("corpoTabela");
+const diaSemanaSpan = document.getElementById("diaSemana");
+const inputData = document.getElementById("dataCulto");
+const coletaneaSelect = document.getElementById("coletanea");
+
+let dadosGeral = {}, dadosAvulsos = {}, dadosCias = {};
+let tonsAprendidos = JSON.parse(localStorage.getItem("tonsAprendidos") || "{}");
+
+async function carregarColetaneas() {
+  try {
+    dadosGeral = await fetch("coletanea_geral.json").then(r=>r.json());
+    dadosAvulsos = await fetch("coletanea_avulsos.json").then(r=>r.json());
+    dadosCias = await fetch("coletanea_cias.json").then(r=>r.json());
+  } catch(e){ console.warn("Erro ao carregar JSONs:", e); }
+}
+
+function getDateFromInputValue(val){
+  if(!val) return null;
+  const parts = val.split('-');
+  if(parts.length !== 3) return null;
+  const y = parseInt(parts[0],10), m = parseInt(parts[1],10)-1, d = parseInt(parts[2],10);
+  return new Date(y,m,d);
+}
+
+function updateDiaSemanaFromInput(){
+  const val = inputData.value;
+  const date = getDateFromInputValue(val) || new Date();
+  const dias = ["Domingo","Segunda-feira","Terça-feira","Quarta-feira","Quinta-feira","Sexta-feira","Sábado"];
+  diaSemanaSpan.textContent = `${date.toLocaleDateString('pt-BR')} — ${dias[date.getDay()]}`;
+}
+
+function adicionarLinha(){
+  const linha = corpoTabela.insertRow();
+  linha.innerHTML = `
+    <td><input type="text" size="4" oninput="buscarLouvor(this)"></td>
+    <td><input type="text" size="38"></td>
+    <td><input type="text" size="6" onchange="salvarTom(this)"></td>
+    <td><input type="text" size="8" readonly></td>
+    <td><input type="text" size="10" readonly></td>
+    <td>
+      <button class="arrow" onclick="mover(this,-1)">⬆️</button>
+      <button class="arrow" onclick="mover(this,1)">⬇️</button>
+    </td>`;
+}
+
+function preencherLinhasIniciais(){
+  corpoTabela.innerHTML = "";
+  for(let i=0;i<8;i++) adicionarLinha();
+}
+
+function buscarLouvor(campo){
+  const num = campo.value.trim();
+  const tipo = coletaneaSelect.value;
+  let base = tipo==="geral"?dadosGeral:tipo==="avulsos"?dadosAvulsos:dadosCias;
+  let registro = base[num];
+  if(!registro && num.length>0){
+    registro = Object.values(base).find(v=>v.nome && v.nome.toLowerCase().includes(num.toLowerCase()));
+  }
+  const linha = campo.closest("tr");
+  if(registro){
+    linha.cells[1].children[0].value = registro.nome;
+    const id = tipo+"-"+registro.nome;
+    const tomSalvo = tonsAprendidos[id];
+    linha.cells[2].children[0].value = tomSalvo || registro.tom || "";
+    linha.cells[3].children[0].value = registro.tom || "-";
+    linha.cells[4].children[0].value = tipo==="geral"?"Geral":tipo==="avulsos"?"Avulso":"CIAs";
+  }
+
+  // Link para PDFs hospedados na release
+  let link = null;
+  if(tipo === "geral" && !isNaN(num) && num>0){
+    const pagina = Math.ceil(num/3);
+    let volume = "";
+    if(pagina <= 151)
+      volume = "https://github.com/evcoutinho/lista-de-louvores/releases/download/v1.0/coletanea_geral_parte1.pdf";
+    else if(pagina <= 310)
+      volume = "https://github.com/evcoutinho/lista-de-louvores/releases/download/v1.0/coletanea_geral_parte2.pdf";
+    else
+      volume = "https://github.com/evcoutinho/lista-de-louvores/releases/download/v1.0/coletanea_geral_parte3.pdf";
+    link = volume + "#page=" + pagina;
+  }
+  else if(tipo === "avulsos")
+    link = "coletanea_avulsos.pdf";
+  else if(tipo === "cias")
+    link = "coletanea_cias.pdf";
+  
+  if(link){
+    linha.cells[1].innerHTML += ` <a class="pdf-link" href="${link}" target="_blank">📖</a>`;
+  }
+}
+
+function salvarTom(campo){
+  const linha = campo.closest("tr");
+  const nome = linha.cells[1].children[0].value.trim();
+  const tipo = linha.cells[4].children[0].value.toLowerCase();
+  if(!nome) return;
+  const tom = campo.value.trim();
+  const id = tipo+"-"+nome;
+  tonsAprendidos[id] = tom;
+  localStorage.setItem("tonsAprendidos", JSON.stringify(tonsAprendidos));
+}
+
+function mover(botao, direcao){
+  const linha = botao.closest("tr");
+  const index = Array.from(corpoTabela.rows).indexOf(linha);
+  if(index+direcao<0 || index+direcao>=corpoTabela.rows.length) return;
+  corpoTabela.insertBefore(linha, direcao>0?corpoTabela.rows[index+2]:corpoTabela.rows[index-1]);
+}
+
+function adicionarLouvorManual(){ adicionarLinha(); }
+
+function limparLista(){ preencherLinhasIniciais(); }
+
+function compartilharWhatsApp(){
+  let texto = "Lista de Louvores:\n";
+  for(let r of corpoTabela.rows){
+    const num = r.cells[0].children[0].value;
+    const nome = r.cells[1].children[0].value;
+    const tom = r.cells[2].children[0].value;
+    if(nome) texto += `${num} - ${nome} (${tom})\n`;
+  }
+  window.open("https://wa.me/?text="+encodeURIComponent(texto), "_blank");
+}
+
+function gerarImagem(){
+  html2canvas(document.getElementById("lista"), {scale:2}).then(canvas=>{
+    const link = document.createElement("a");
+    link.download = "lista_louvores.png";
+    link.href = canvas.toDataURL();
+    link.click();
+  });
+}
+
+document.addEventListener("DOMContentLoaded", async ()=>{
+  await carregarColetaneas();
+  preencherLinhasIniciais();
+  updateDiaSemanaFromInput();
+});
+</script>
+</body>
+</html>
 
